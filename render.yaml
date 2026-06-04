@@ -1,0 +1,22 @@
+services:
+  # 백엔드 Web Service
+  - type: web
+    name: circuit-note-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false   # Render 대시보드에서 직접 입력
+
+  # 프런트엔드 Static Site
+  - type: web
+    name: circuit-note-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        sync: false   # 백엔드 URL 입력 (예: https://circuit-note-api.onrender.com)
