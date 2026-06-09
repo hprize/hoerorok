@@ -2,6 +2,7 @@ import base64
 import os
 import re
 import subprocess
+import sys
 import uuid
 
 import openai
@@ -159,8 +160,9 @@ async def render_circuit(payload: dict):
     safe_code = "import matplotlib; matplotlib.use('Agg')\n" + safe_code
 
     try:
+        # sys.executable: 현재 venv의 python 사용 (schemdraw 등 패키지 보장)
         result = subprocess.run(
-            ["python3", "-c", safe_code],
+            [sys.executable, "-c", safe_code],
             capture_output=True,
             text=True,
             timeout=10,
