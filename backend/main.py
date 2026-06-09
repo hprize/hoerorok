@@ -37,12 +37,19 @@ Rules:
 4. Identify every component: resistor, capacitor, inductor, voltage source,
    current source, ground, wire, op-amp, diode, transistor, switch, etc.
 5. Match the topology exactly — the same nodes must be connected.
-6. Use .label() to add component values if visible in the photo (e.g., '10kΩ', '100μF').
-7. Use .right() .left() .up() .down() for direction.
-8. End with: d.save('output.png', dpi=150, transparent=True)
-9. If the image contains equations or formulas, output them separately
-   after the code block as: LATEX: <latex string>
-   Use standard LaTeX math notation. One formula per line.
+6. ALL labels with subscripts, superscripts, or Greek letters MUST be wrapped in $...$
+   for matplotlib mathtext rendering.
+   CORRECT:   .label('$R_{TH}$')   .label('$V_{TH}$')   .label('$10k\\Omega$')
+   INCORRECT: .label('R_{TH}')     .label('V_{TH}')      .label('10kΩ')
+   Plain labels without math notation do NOT need $: .label('A')  .label('B')
+7. Voltage source selection:
+   - If the photo shows a CIRCLE with + and - signs → use elm.SourceV()
+   - If the photo shows PARALLEL LINES (battery symbol: long+short line pairs) → use elm.Battery()
+8. Use .right() .left() .up() .down() for direction.
+9. End with: d.save('output.png', dpi=150, transparent=True)
+10. If the image contains equations or formulas, output them separately
+    after the code block as: LATEX: <latex string>
+    Use standard LaTeX math notation. One formula per line.
 """
 
 
@@ -156,8 +163,26 @@ async def render_circuit(payload: dict):
     if "d.save(" not in safe_code:
         safe_code += f"\nd.save('{output_path}', dpi=150, transparent=True)"
 
-    # matplotlib GUI 시도 방지 — 없으면 macOS에서 subprocess가 무한 대기
-    safe_code = "import matplotlib; matplotlib.use('Agg')\n" + safe_code
+    # matplotlib GUI 시도 방지 + schemdraw 자동표시 비활성화
+    header = (
+        "import matplotlib\n"
+        "matplotlib.use('Agg')\n"
+        "import schemdraw\n"
+        "try:\n"
+        "    schemdraw.config(show=False)\n"
+        "except Exception:\n"
+        "    pass\n"
+    )
+    safe_code = header + safe_code
+
+    # 디버깅: 실행할 코드를 서버 로그에 출력
+    print("=== RENDER CODE ===")
+    print(safe_code)
+    print("===================")
+
+    # subprocess 환경변수에 MPLBACKEND=Agg 명시 (이중 방어)
+    env = os.environ.copy()
+    env["MPLBACKEND"] = "Agg"
 
     try:
         # sys.executable: 현재 venv의 python 사용 (schemdraw 등 패키지 보장)
@@ -165,10 +190,16 @@ async def render_circuit(payload: dict):
             [sys.executable, "-c", safe_code],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=30,  # 임시로 30초로 늘려 실제 완료 여부 확인
+            env=env,
         )
     except subprocess.TimeoutExpired:
-        raise HTTPException(408, "렌더링 시간 초과 (10초). 코드를 확인해주세요.")
+        raise HTTPException(408, "렌더링 시간 초과 (30초). 코드를 확인해주세요.")
+
+    # 디버깅: subprocess 결과 로그
+    print(f"returncode: {result.returncode}")
+    print(f"stdout: {result.stdout[:300]}")
+    print(f"stderr: {result.stderr[:300]}")
 
     if result.returncode != 0:
         raise HTTPException(422, f"코드 실행 오류: {result.stderr[:500]}")
