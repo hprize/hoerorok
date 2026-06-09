@@ -45,10 +45,15 @@ Rules:
    CORRECT:   .label('$R_{TH}$')   .label('$V_{TH}$')   .label('$10k\\Omega$')
    INCORRECT: .label('R_{TH}')     .label('V_{TH}')      .label('10kΩ')
    Plain labels without math notation do NOT need $: .label('A')  .label('B')
-7. Voltage source selection:
+7. Label location rules — loc= is in the ELEMENT'S LOCAL frame, not the drawing frame:
+   - Horizontal element (.right()): loc='top' → above in drawing (USE THIS for component values)
+   - Vertical up element (.up()):   loc='top' → LEFT  in drawing (USE THIS for left-side labels)
+   - Vertical down element (.down()): loc='top' → RIGHT in drawing (USE THIS for right-side labels)
+   - NEVER use loc='lft' or loc='rgt' for component value labels — they place at element start/end points.
+   - For open-terminal nodes (Dot), loc='top' means above in drawing.
+8. Voltage source selection:
    - If the photo shows a CIRCLE with + and - signs → use elm.SourceV()
    - If the photo shows PARALLEL LINES (battery symbol: long+short line pairs) → use elm.Battery()
-8. Use .right() .left() .up() .down() for direction.
 9. End with: d.save('output.png', dpi=150, transparent=True)
 10. If the image contains equations or formulas, output them separately
     after the code block as: LATEX: <latex string>
@@ -62,7 +67,7 @@ Photo description: Battery on left side (vertical), R1 on top (horizontal), R2 o
 import schemdraw
 import schemdraw.elements as elm
 with schemdraw.Drawing() as d:
-    bat = d.add(elm.Battery().up().label('$V_s$', loc='left'))
+    bat = d.add(elm.Battery().up().label('$V_s$', loc='top'))
     d.add(elm.Resistor().right().at(bat.end).label('$R_1$', loc='top'))
     d.add(elm.Dot(open=True).label('A', loc='right'))
     d.add(elm.Resistor().down().label('$R_2$', loc='right'))
@@ -77,7 +82,7 @@ Photo description: Voltage source on left (vertical), R1 on top-right (vertical)
 import schemdraw
 import schemdraw.elements as elm
 with schemdraw.Drawing() as d:
-    src = d.add(elm.SourceV().up().label('$V_{in}$', loc='left'))
+    src = d.add(elm.SourceV().up().label('$V_{in}$', loc='top'))
     d.add(elm.Line().right().at(src.end))
     r1 = d.add(elm.Resistor().down().label('$R_1$', loc='right'))
     d.add(elm.Dot().label('$V_{out}$', loc='right'))
@@ -92,7 +97,7 @@ Photo description: Current source on left (vertical), resistor R, inductor L, an
 import schemdraw
 import schemdraw.elements as elm
 with schemdraw.Drawing() as d:
-    src = d.add(elm.SourceI().up().label('$I_s$', loc='left'))
+    src = d.add(elm.SourceI().up().label('$I_s$', loc='top'))
     top = d.add(elm.Line().right().at(src.end))
     d.add(elm.Resistor().down().at(top.end).label('$R$', loc='right'))
     d.add(elm.Line().right().at(top.end))
