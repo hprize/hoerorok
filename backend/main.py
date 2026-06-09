@@ -155,6 +155,9 @@ async def render_circuit(payload: dict):
     if "d.save(" not in safe_code:
         safe_code += f"\nd.save('{output_path}', dpi=150, transparent=True)"
 
+    # matplotlib GUI 시도 방지 — 없으면 macOS에서 subprocess가 무한 대기
+    safe_code = "import matplotlib; matplotlib.use('Agg')\n" + safe_code
+
     try:
         result = subprocess.run(
             ["python3", "-c", safe_code],
