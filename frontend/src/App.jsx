@@ -10,11 +10,32 @@ const STATUS = {
   ERROR: "error",
 };
 
+const SCHEMDRAW_REF = `# 주요 elements
+elm.Resistor()     저항 (R)
+elm.Capacitor()    커패시터 (C)
+elm.Inductor()     인덕터 (L)
+elm.SourceV()      전압원 (원형 +/-)
+elm.Battery()      배터리 (평행선)
+elm.SourceI()      전류원
+elm.Ground()       접지
+elm.Dot()          노드점
+elm.Line()         도선
+
+# 방향
+.right()  .left()  .up()  .down()
+
+# 레이블 (첨자는 반드시 $...$로 감싸기)
+.label('$R_{TH}$')
+.label('$V_s$', loc='left')
+.label('A', loc='top')`;
+
 export default function App() {
   const [status, setStatus] = useState(STATUS.IDLE);
   const [originalUrl, setOriginalUrl] = useState(null);
   const [circuitUrl, setCircuitUrl] = useState(null);
+  const [editableCode, setEditableCode] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [refOpen, setRefOpen] = useState(false);
   const fileInputRef = useRef(null);
 
   // 파일 선택 시 변환 파이프라인 시작
@@ -24,6 +45,7 @@ export default function App() {
 
     setOriginalUrl(URL.createObjectURL(file));
     setCircuitUrl(null);
+    setEditableCode("");
     setErrorMsg("");
     setStatus(STATUS.CONVERTING);
 
@@ -49,12 +71,25 @@ export default function App() {
         throw { detail: "회로도 코드를 추출하지 못했어요. 사진을 다시 찍어보세요." };
       }
 
-      // Step 2: 코드 → PNG
-      setStatus(STATUS.RENDERING);
+      setEditableCode(schemdraw_code);
+      await renderCode(schemdraw_code);
+    } catch (e) {
+      showError(e);
+    }
+
+    e.target.value = "";
+  }
+
+  // 코드 → PNG 렌더링 (신규 업로드 및 편집기 재렌더링 공용)
+  async function renderCode(code) {
+    setStatus(STATUS.RENDERING);
+    setErrorMsg("");
+
+    try {
       const renderRes = await fetch(`${API_BASE}/api/render`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: schemdraw_code }),
+        body: JSON.stringify({ code }),
       });
 
       if (!renderRes.ok) {
@@ -68,21 +103,22 @@ export default function App() {
       setCircuitUrl(URL.createObjectURL(blob));
       setStatus(STATUS.DONE);
     } catch (e) {
-      // 에러를 한국어로 표시
-      if (e.name === "TypeError") {
-        setErrorMsg("서버에 연결할 수 없어요. 인터넷을 확인해주세요.");
-      } else if (e.status === 408) {
-        setErrorMsg("처리 시간이 너무 오래 걸렸어요. 사진이 복잡하면 나눠서 찍어보세요.");
-      } else if (e.status === 422) {
-        setErrorMsg(`코드 오류: ${e.detail}\n코드를 수정하거나 다시 촬영해보세요.`);
-      } else {
-        setErrorMsg(e.detail || e.message || "알 수 없는 오류가 발생했어요.");
-      }
-      setStatus(STATUS.ERROR);
+      showError(e);
     }
+  }
 
-    // 같은 파일 재업로드 허용을 위해 input 초기화
-    e.target.value = "";
+  // 에러를 한국어로 상태에 저장
+  function showError(e) {
+    if (e.name === "TypeError") {
+      setErrorMsg("서버에 연결할 수 없어요. 인터넷을 확인해주세요.");
+    } else if (e.status === 408) {
+      setErrorMsg("처리 시간이 너무 오래 걸렸어요. 사진이 복잡하면 나눠서 찍어보세요.");
+    } else if (e.status === 422) {
+      setErrorMsg(`코드 오류: ${e.detail}\n코드를 수정해보세요.`);
+    } else {
+      setErrorMsg(e.detail || e.message || "알 수 없는 오류가 발생했어요.");
+    }
+    setStatus(STATUS.ERROR);
   }
 
   const isLoading = status === STATUS.CONVERTING || status === STATUS.RENDERING;
@@ -125,13 +161,14 @@ export default function App() {
       {status === STATUS.ERROR && (
         <div style={styles.errorBox}>
           <strong>오류</strong>
-          <p style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{errorMsg}</p>
+          <p style={{ margin: "4px 0 0", whiteSpace: "pre-wrap", fontSize: 13 }}>{errorMsg}</p>
         </div>
       )}
 
       {/* 결과 영역 */}
       {(originalUrl || circuitUrl) && (
         <div style={styles.resultSection}>
+          {/* 원본 + 결과 나란히 */}
           <div style={styles.imageRow}>
             {originalUrl && (
               <div style={styles.imageCard}>
@@ -153,13 +190,49 @@ export default function App() {
               PNG 다운로드
             </a>
           )}
+
+          {/* 코드 편집기 */}
+          {editableCode !== "" && (
+            <div style={styles.editorSection}>
+              <p style={styles.editorTitle}>SchemDraw 코드 편집</p>
+
+              {/* SchemDraw 참조 카드 (접힘) */}
+              <div style={styles.accordion}>
+                <button
+                  onClick={() => setRefOpen(o => !o)}
+                  style={styles.accordionBtn}
+                >
+                  {refOpen ? "▲" : "▼"} SchemDraw 빠른 참조
+                </button>
+                {refOpen && (
+                  <pre style={styles.refCard}>{SCHEMDRAW_REF}</pre>
+                )}
+              </div>
+
+              <textarea
+                value={editableCode}
+                onChange={e => setEditableCode(e.target.value)}
+                style={styles.textarea}
+                spellCheck={false}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+
+              <button
+                onClick={() => renderCode(editableCode)}
+                disabled={isLoading}
+                style={{ ...styles.rerenderBtn, opacity: isLoading ? 0.5 : 1 }}
+              >
+                {isLoading ? "렌더링 중..." : "다시 렌더링"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// 로딩 스피너 컴포넌트
 function Spinner() {
   return (
     <div style={{
@@ -170,7 +243,6 @@ function Spinner() {
   );
 }
 
-// 인라인 스타일 — 모바일 우선
 const styles = {
   container: {
     padding: "24px 16px",
@@ -263,9 +335,76 @@ const styles = {
     textDecoration: "none",
     touchAction: "manipulation",
   },
+  editorSection: {
+    marginTop: 24,
+    borderTop: "1px solid #e5e5e5",
+    paddingTop: 20,
+  },
+  editorTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#888",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    margin: "0 0 10px",
+  },
+  accordion: {
+    marginBottom: 10,
+  },
+  accordionBtn: {
+    background: "none",
+    border: "1px solid #ddd",
+    borderRadius: 8,
+    padding: "8px 14px",
+    fontSize: 14,
+    cursor: "pointer",
+    width: "100%",
+    textAlign: "left",
+    color: "#444",
+  },
+  refCard: {
+    marginTop: 6,
+    padding: "12px 14px",
+    background: "#f7f7f7",
+    borderRadius: 8,
+    fontSize: 13,
+    lineHeight: 1.6,
+    overflowX: "auto",
+    whiteSpace: "pre",
+    color: "#333",
+  },
+  textarea: {
+    width: "100%",
+    minHeight: 220,
+    padding: "12px 14px",
+    fontFamily: "ui-monospace, monospace",
+    fontSize: 13,
+    lineHeight: 1.6,
+    border: "1px solid #ddd",
+    borderRadius: 8,
+    resize: "vertical",
+    boxSizing: "border-box",
+    color: "#222",
+    background: "#fafafa",
+  },
+  rerenderBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    marginTop: 10,
+    width: "100%",
+    background: "#111",
+    color: "#fff",
+    border: "none",
+    borderRadius: 10,
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: "pointer",
+    touchAction: "manipulation",
+  },
 };
 
-// 스피너 keyframe을 <style> 태그로 주입
 const styleTag = document.createElement("style");
 styleTag.textContent = "@keyframes spin { to { transform: rotate(360deg); } }";
 document.head.appendChild(styleTag);

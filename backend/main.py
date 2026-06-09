@@ -37,6 +37,9 @@ Rules:
 4. Identify every component: resistor, capacitor, inductor, voltage source,
    current source, ground, wire, op-amp, diode, transistor, switch, etc.
 5. Match the topology exactly — the same nodes must be connected.
+   - Trace the circuit loop(s) carefully before writing code.
+   - Each element's .end connects to the next element's start by default.
+   - Use .at(node) to branch from an existing node.
 6. ALL labels with subscripts, superscripts, or Greek letters MUST be wrapped in $...$
    for matplotlib mathtext rendering.
    CORRECT:   .label('$R_{TH}$')   .label('$V_{TH}$')   .label('$10k\\Omega$')
@@ -50,6 +53,55 @@ Rules:
 10. If the image contains equations or formulas, output them separately
     after the code block as: LATEX: <latex string>
     Use standard LaTeX math notation. One formula per line.
+
+--- FEW-SHOT EXAMPLES ---
+
+Example 1: Series loop (battery left, resistor top, load right)
+Photo description: Battery on left side (vertical), R1 on top (horizontal), R2 on right side (vertical). Nodes A (top-right) and B (bottom-right).
+```python
+import schemdraw
+import schemdraw.elements as elm
+with schemdraw.Drawing() as d:
+    bat = d.add(elm.Battery().up().label('$V_s$', loc='left'))
+    d.add(elm.Resistor().right().at(bat.end).label('$R_1$', loc='top'))
+    d.add(elm.Dot(open=True).label('A', loc='right'))
+    d.add(elm.Resistor().down().label('$R_2$', loc='right'))
+    d.add(elm.Dot(open=True).label('B', loc='right'))
+    d.add(elm.Line().left().to(bat.start))
+    d.save('output.png', dpi=150, transparent=True)
+```
+
+Example 2: Voltage divider (source left, two resistors in series on right)
+Photo description: Voltage source on left (vertical), R1 on top-right (vertical), R2 on bottom-right (vertical). Output taken between R1 and R2.
+```python
+import schemdraw
+import schemdraw.elements as elm
+with schemdraw.Drawing() as d:
+    src = d.add(elm.SourceV().up().label('$V_{in}$', loc='left'))
+    d.add(elm.Line().right().at(src.end))
+    r1 = d.add(elm.Resistor().down().label('$R_1$', loc='right'))
+    d.add(elm.Dot().label('$V_{out}$', loc='right'))
+    r2 = d.add(elm.Resistor().down().label('$R_2$', loc='right'))
+    d.add(elm.Line().left().to(src.start))
+    d.save('output.png', dpi=150, transparent=True)
+```
+
+Example 3: Parallel RLC (source on left, R/L/C in parallel on right)
+Photo description: Current source on left (vertical), resistor R, inductor L, and capacitor C all connected in parallel between top and bottom nodes.
+```python
+import schemdraw
+import schemdraw.elements as elm
+with schemdraw.Drawing() as d:
+    src = d.add(elm.SourceI().up().label('$I_s$', loc='left'))
+    top = d.add(elm.Line().right().at(src.end))
+    d.add(elm.Resistor().down().at(top.end).label('$R$', loc='right'))
+    d.add(elm.Line().right().at(top.end))
+    d.add(elm.Inductor().down().label('$L$', loc='right'))
+    d.add(elm.Line().right().at(top.end).tox(src.start).right())
+    d.add(elm.Capacitor().down().label('$C$', loc='right'))
+    d.add(elm.Line().left().at(src.start).tox(src.start))
+    d.save('output.png', dpi=150, transparent=True)
+```
 """
 
 
@@ -202,7 +254,7 @@ async def render_circuit(payload: dict):
     print(f"stderr: {result.stderr[:300]}")
 
     if result.returncode != 0:
-        raise HTTPException(422, f"코드 실행 오류: {result.stderr[:500]}")
+        raise HTTPException(422, f"코드 실행 오류: {result.stderr[:2000]}")
 
     if not os.path.exists(output_path):
         raise HTTPException(500, "PNG 파일이 생성되지 않았습니다")
