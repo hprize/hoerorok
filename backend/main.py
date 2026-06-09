@@ -5,9 +5,13 @@ import subprocess
 import uuid
 
 import openai
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
+# .env 파일에서 환경변수 로드 (로컬 개발용)
+load_dotenv()
 
 app = FastAPI(title="회로록 API")
 
@@ -66,26 +70,33 @@ async def convert(file: UploadFile = File(...)):
     # OPENAI_API_KEY 환경변수 자동 사용
     client = openai.OpenAI()
 
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        max_tokens=4096,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{media_type};base64,{image_data}"},
-                    },
-                    {
-                        "type": "text",
-                        "text": "이 사진의 회로도를 SchemDraw 코드로 변환해줘. 수식이 있으면 LaTeX도 출력해줘.",
-                    },
-                ],
-            },
-        ],
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{media_type};base64,{image_data}"},
+                        },
+                        {
+                            "type": "text",
+                            "text": "이 사진의 회로도를 SchemDraw 코드로 변환해줘. 수식이 있으면 LaTeX도 출력해줘.",
+                        },
+                    ],
+                },
+            ],
+        )
+    except openai.AuthenticationError:
+        raise HTTPException(500, "OpenAI API 키가 유효하지 않습니다. 서버 환경변수를 확인해주세요.")
+    except openai.RateLimitError:
+        raise HTTPException(429, "OpenAI API 사용 한도를 초과했습니다. 잠시 후 다시 시도해주세요.")
+    except Exception as e:
+        raise HTTPException(500, f"AI 호출 중 오류가 발생했습니다: {str(e)}")
 
     raw_output = response.choices[0].message.content
     schemdraw_code, latex_list = parse_ai_output(raw_output)

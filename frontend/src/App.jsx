@@ -37,8 +37,10 @@ export default function App() {
       });
 
       if (!convertRes.ok) {
-        const err = await convertRes.json();
-        throw { status: convertRes.status, detail: err.detail };
+        let detail;
+        try { detail = (await convertRes.json()).detail; }
+        catch { detail = await convertRes.text(); }
+        throw { status: convertRes.status, detail };
       }
 
       const { schemdraw_code } = await convertRes.json();
@@ -56,8 +58,10 @@ export default function App() {
       });
 
       if (!renderRes.ok) {
-        const err = await renderRes.json();
-        throw { status: renderRes.status, detail: err.detail };
+        let detail;
+        try { detail = (await renderRes.json()).detail; }
+        catch { detail = await renderRes.text(); }
+        throw { status: renderRes.status, detail };
       }
 
       const blob = await renderRes.blob();
